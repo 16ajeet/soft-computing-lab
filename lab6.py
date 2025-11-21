@@ -9,215 +9,211 @@
 import numpy as np
 import pandas as pd
 
+# ===========================================================
 # TRIANGULAR MEMBERSHIP FUNCTION
-# A triangular membership function is defined by 3 points (a, b, c)
-# It increases from a→b, then decreases from b→c.
+# ===========================================================
 
 def triangular_membership(x, a, b, c):
     x = np.asarray(x, dtype=float)
     mu = np.zeros_like(x)
 
-    # Left slope (increasing)
-    increasing = (x >= a) & (x <= b)
-    mu[increasing] = (x[increasing] - a) / (b - a + 1e-12)
+    inc = (x >= a) & (x <= b)
+    mu[inc] = (x[inc] - a) / (b - a + 1e-12)
 
-    # Right slope (decreasing)
-    decreasing = (x >= b) & (x <= c)
-    mu[decreasing] = (c - x[decreasing]) / (c - b + 1e-12)
+    dec = (x >= b) & (x <= c)
+    mu[dec] = (c - x[dec]) / (c - b + 1e-12)
 
-    # Peak (b)
     mu[x == b] = 1.0
-
     return np.clip(mu, 0, 1)
 
 
-# 19. FUZZY SET ARITHMETIC
+# ===========================================================
+# 19. FUZZY SET OPERATIONS
+# ===========================================================
 
-def fuzzy_complement(mu):
-    return 1 - mu
+def fuzzy_complement(mu): return 1 - mu
+def fuzzy_union(muA, muB): return np.maximum(muA, muB)
+def fuzzy_intersection(muA, muB): return np.minimum(muA, muB)
+def fuzzy_algebraic_sum(muA, muB): return muA + muB - muA * muB
+def fuzzy_algebraic_product(muA, muB): return muA * muB
 
-def fuzzy_union(muA, muB):
-    return np.maximum(muA, muB)
-
-def fuzzy_intersection(muA, muB):
-    return np.minimum(muA, muB)
-
-def fuzzy_algebraic_sum(muA, muB):
-    return muA + muB - muA * muB
-
-def fuzzy_algebraic_product(muA, muB):
-    return muA * muB
-
-# Extension principle: fuzzy addition
-def fuzzy_extension_add(universeA, muA, universeB, muB):
+def fuzzy_extension_add(valsA, muA, valsB, muB):
     result = {}
-    for a, mu_a in zip(universeA, muA):
-        for b, mu_b in zip(universeB, muB):
+    for a, ma in zip(valsA, muA):
+        for b, mb in zip(valsB, muB):
             z = round(a + b, 6)
-            membership = min(mu_a, mu_b)
-            result[z] = max(result.get(z, 0), membership)
-    values = np.array(sorted(result.keys()))
-    memberships = np.array([result[v] for v in values])
-    return values, memberships
+            result[z] = max(result.get(z, 0), min(ma, mb))
+    return np.array(sorted(result)), np.array([result[z] for z in sorted(result)])
 
-# Extension principle: fuzzy multiplication
-def fuzzy_extension_multiply(universeA, muA, universeB, muB):
+def fuzzy_extension_multiply(valsA, muA, valsB, muB):
     result = {}
-    for a, mu_a in zip(universeA, muA):
-        for b, mu_b in zip(universeB, muB):
+    for a, ma in zip(valsA, muA):
+        for b, mb in zip(valsB, muB):
             z = round(a * b, 6)
-            membership = min(mu_a, mu_b)
-            result[z] = max(result.get(z, 0), membership)
-    values = np.array(sorted(result.keys()))
-    memberships = np.array([result[v] for v in values])
-    return values, memberships
+            result[z] = max(result.get(z, 0), min(ma, mb))
+    return np.array(sorted(result)), np.array([result[z] for z in sorted(result)])
 
-
+# ===========================================================
 # 20. TAKAGI–SUGENO FAN CONTROLLER
-# Inputs: Temperature (°C) and Humidity (%)
-# Output: Fan Speed (RPM)
-# Using triangular membership functions and TS rules.
+# ===========================================================
 
-# Temperature fuzzy sets
 temperature_mfs = {
     "Low": lambda x: triangular_membership(x, 0, 0, 20),
     "Medium": lambda x: triangular_membership(x, 10, 20, 30),
     "High": lambda x: triangular_membership(x, 20, 40, 40)
 }
 
-# Humidity fuzzy sets
 humidity_mfs = {
     "Low": lambda x: triangular_membership(x, 0, 0, 50),
     "Medium": lambda x: triangular_membership(x, 25, 50, 75),
     "High": lambda x: triangular_membership(x, 50, 100, 100)
 }
 
-# Takagi-Sugeno rule base
-# Each rule outputs a FUNCTION of (T, H) → z
 ts_rules = [
     ("Low", "Low", lambda T,H: 200),
     ("Low", "Medium", lambda T,H: 300),
     ("Low", "High", lambda T,H: 400),
-
     ("Medium", "Low", lambda T,H: 800 + 10*T - 2*H),
     ("Medium", "Medium", lambda T,H: 1500 + 8*T + 4*H),
     ("Medium", "High", lambda T,H: 1800 + 12*T + 6*H),
-
     ("High", "Low", lambda T,H: 2000 + 15*T + 1*H),
     ("High", "Medium", lambda T,H: 2400 + 10*T + 5*H),
-    ("High", "High", lambda T,H: 2800 + 18*T + 10*H)
+    ("High", "High", lambda T,H: 2800 + 18*T + 10*H),
 ]
 
-def compute_ts_fan_speed(temperature, humidity):
-    rule_strengths = []
-    rule_outputs = []
+def compute_ts_fan_speed(T, H):
+    strengths = []
+    outputs = []
 
-    for temp_label, hum_label, rule_function in ts_rules:
-        mu_temp = temperature_mfs[temp_label](np.array([temperature]))[0]
-        mu_hum = humidity_mfs[hum_label](np.array([humidity]))[0]
+    for temp_label, hum_label, fn in ts_rules:
+        mu_T = temperature_mfs[temp_label](np.array([T]))[0]
+        mu_H = humidity_mfs[hum_label](np.array([H]))[0]
 
-        firing_strength = min(mu_temp, mu_hum)
-        rule_output = rule_function(temperature, humidity)
+        firing = min(mu_T, mu_H)
+        strengths.append(firing)
+        outputs.append(fn(T, H))
 
-        rule_strengths.append(firing_strength)
-        rule_outputs.append(rule_output)
+    strengths = np.array(strengths)
+    outputs = np.array(outputs)
 
-    rule_strengths = np.array(rule_strengths)
-    rule_outputs = np.array(rule_outputs)
+    if strengths.sum() == 0:
+        return 0
 
-    if rule_strengths.sum() == 0:
-        return 0  # no activation
-
-    # Weighted average (TS defuzzification)
-    return float(np.sum(rule_strengths * rule_outputs) / rule_strengths.sum())
+    return float(np.sum(strengths * outputs) / strengths.sum())
 
 
-# 21. FUZZY RELATION COMPOSITION & CRISP FAN SPEED
+# ===========================================================
+# 21. FUZZY RELATION COMPOSITION
+# ===========================================================
 
-# Define discrete temperature, rotor speed, and fan speed
-temperature_values = np.array([18, 22, 26])
-rotor_values = np.array([500, 1000, 1500])
-fan_values = np.array([800, 1600, 2400])
+Temp_vals = np.array([18, 22, 26])
+Rotor_vals = np.array([500, 1000, 1500])
+Fan_vals = np.array([800, 1600, 2400])
 
-# Fuzzy relation: Temperature → Rotor
 R1 = np.array([
     [0.8, 0.4, 0.0],
     [0.2, 0.9, 0.3],
     [0.0, 0.5, 0.9]
 ])
 
-# Fuzzy relation: Rotor → Fan
 R2 = np.array([
     [0.9, 0.2, 0.0],
     [0.3, 0.8, 0.4],
     [0.0, 0.4, 0.95]
 ])
 
-# Max-min composition of fuzzy relations
 def max_min_composition(R1, R2):
-    rows, shared_dim = R1.shape
-    _, cols = R2.shape
-    result = np.zeros((rows, cols))
+    out = np.zeros((R1.shape[0], R2.shape[1]))
+    for i in range(R1.shape[0]):
+        for k in range(R2.shape[1]):
+            out[i, k] = max(min(R1[i, j], R2[j, k]) for j in range(R1.shape[1]))
+    return out
 
-    for i in range(rows):
-        for k in range(cols):
-            result[i, k] = max(min(R1[i, j], R2[j, k]) for j in range(shared_dim))
+R_comp = max_min_composition(R1, R2)
 
-    return result
-
-R_composed = max_min_composition(R1, R2)
-
-# Fuzzify crisp temperature for relation-based inference
-def fuzzify_temperature_crisp(t, centers):
-    memberships = []
-    for i, center in enumerate(centers):
+def fuzzify_temp_crisp(t):
+    mus = []
+    for i, c in enumerate(Temp_vals):
         if i == 0:
-            a,b,c2 = centers[0]-4, centers[0], centers[1]
-        elif i == len(centers)-1:
-            a,b,c2 = centers[-2], centers[-1], centers[-1]+4
+            a,b,c2 = Temp_vals[0]-4, Temp_vals[0], Temp_vals[1]
+        elif i == 2:
+            a,b,c2 = Temp_vals[1], Temp_vals[2], Temp_vals[2]+4
         else:
-            a,b,c2 = centers[i-1], centers[i], centers[i+1]
+            a,b,c2 = Temp_vals[i-1], Temp_vals[i], Temp_vals[i+1]
 
         mu = triangular_membership(np.array([t]), a, b, c2)[0]
-        memberships.append(mu)
+        mus.append(mu)
 
-    memberships = np.array(memberships)
+    mus = np.array(mus)
+    if mus.sum() != 0:
+        mus = mus / mus.sum()
+    return mus
 
-    if memberships.sum() != 0:
-        memberships /= memberships.sum()
+def infer_fan(mu_temp, R):
+    return np.array([max(min(mu_temp[i], R[i, k]) for i in range(len(mu_temp))) 
+                     for k in range(R.shape[1])])
 
-    return memberships
-
-# Infer fan fuzzy set
-def infer_fan_from_temp(mu_temp, R):
-    return np.array([
-        max(min(mu_temp[i], R[i, k]) for i in range(len(mu_temp)))
-        for k in range(R.shape[1])
-    ])
-
-# Defuzzification using centroid method
-def centroid(values, memberships):
-    if memberships.sum() == 0:
-        return float(values.mean())
-    return float(np.sum(values * memberships) / memberships.sum())
+def centroid(values, mus):
+    if mus.sum() == 0:
+        return values.mean()
+    return np.sum(values * mus) / mus.sum()
 
 
-# Example Execution
+# ===========================================================
+# PRINT EVERYTHING
+# ===========================================================
 
 if __name__ == "__main__":
 
-    # TS controller example
-    print("Takagi-Sugeno Fan Speed:", compute_ts_fan_speed(25, 40))
+    print("\n==============================")
+    print(" 19. FUZZY SET OPERATIONS")
+    print("==============================")
 
-    # Relation composition
-    print("\nR1 ∘ R2:")
-    print(R_composed)
+    universe = np.array([0, 1, 2, 3, 4, 5])
+    muA = triangular_membership(universe, 0, 2, 4)
+    muB = triangular_membership(universe, 1, 3, 5)
 
-    # Crisp temperature example
-    mu_temp = fuzzify_temperature_crisp(23, temperature_values)
-    mu_fan = infer_fan_from_temp(mu_temp, R_composed)
-    crisp_fan_speed = centroid(fan_values, mu_fan)
+    print("\nUniverse:", universe)
+    print("muA:", muA)
+    print("muB:", muB)
+    print("\nComplement of A:", fuzzy_complement(muA))
+    print("Union A U B:", fuzzy_union(muA, muB))
+    print("Intersection A ∩ B:", fuzzy_intersection(muA, muB))
+    print("Algebraic Sum:", fuzzy_algebraic_sum(muA, muB))
+    print("Algebraic Product:", fuzzy_algebraic_product(muA, muB))
 
-    print("\nFuzzified Temperature:", mu_temp)
-    print("Fan Fuzzy Set:", mu_fan)
-    print("Crisp Fan Speed:", crisp_fan_speed)
+    add_vals, add_mu = fuzzy_extension_add(universe, muA, universe, muB)
+    mul_vals, mul_mu = fuzzy_extension_multiply(universe, muA, universe, muB)
+
+    print("\nExtension Principle Addition:")
+    print("Values:", add_vals)
+    print("Memberships:", add_mu)
+
+    print("\nExtension Principle Multiplication:")
+    print("Values:", mul_vals)
+    print("Memberships:", mul_mu)
+
+
+    print("\n==============================")
+    print(" 20. TAKAGI–SUGENO FAN CONTROLLER")
+    print("==============================")
+
+    print("Fan speed for T=25, H=40 →", compute_ts_fan_speed(25, 40))
+
+
+    print("\n==============================")
+    print(" 21. RELATION COMPOSITION")
+    print("==============================")
+
+    print("\nR1:\n", R1)
+    print("\nR2:\n", R2)
+    print("\nR1 ∘ R2:\n", R_comp)
+
+    mu_temp = fuzzify_temp_crisp(23)
+    print("\nFuzzified temperature 23°C:", mu_temp)
+
+    mu_fan = infer_fan(mu_temp, R_comp)
+    print("Fan fuzzy set:", mu_fan)
+
+    crisp_speed = centroid(Fan_vals, mu_fan)
+    print("Crisp Fan Speed:", crisp_speed)
