@@ -14,37 +14,39 @@ import pandas as pd
 # ===========================================================
 
 def triangular_membership(x, a, b, c):
-    x = np.asarray(x, dtype=float)
-    mu = np.zeros_like(x)
+    x = np.asarray(x, dtype=float)  #convert into numpy array
+    mu = np.zeros_like(x)       #mmembership with 0 value
 
-    inc = (x >= a) & (x <= b)
-    mu[inc] = (x[inc] - a) / (b - a + 1e-12)
+    inc = (x >= a) & (x <= b)   # a < x < b -> to left me hoga
+    mu[inc] = (x[inc] - a) / (b - a + 1e-12)  #x-a/b-a     > x = 15, a = 10, b = 20 > triangle (10,20,30) 
 
-    dec = (x >= b) & (x <= c)
-    mu[dec] = (c - x[dec]) / (c - b + 1e-12)
+    dec = (x >= b) & (x <= c)       #10,20,30   > check 25
+    mu[dec] = (c - x[dec]) / (c - b + 1e-12)    #c-x/c-b  > x = 25, c = 20, b = 30
 
-    mu[x == b] = 1.0
-    return np.clip(mu, 0, 1)
+    mu[x == b] = 1.0    # if x = 20 then its in mid > peak
+    return np.clip(mu, 0, 1)    #clip to avoid floating error > keep value between 0 and 1
 
 
 # ===========================================================
 # 19. FUZZY SET OPERATIONS
 # ===========================================================
 
-def fuzzy_complement(mu): return 1 - mu
-def fuzzy_union(muA, muB): return np.maximum(muA, muB)
-def fuzzy_intersection(muA, muB): return np.minimum(muA, muB)
-def fuzzy_algebraic_sum(muA, muB): return muA + muB - muA * muB
-def fuzzy_algebraic_product(muA, muB): return muA * muB
+def fuzzy_complement(mu): return 1 - mu         #1- mmbership
+def fuzzy_union(muA, muB): return np.maximum(muA, muB)      #union -> take maximum of the two
+def fuzzy_intersection(muA, muB): return np.minimum(muA, muB)       #intersection -> take minimum of the two
+def fuzzy_algebraic_sum(muA, muB): return muA + muB - muA * muB     # A + B - A*B  > extension add then extension multiply and the take their subtraction
+def fuzzy_algebraic_product(muA, muB): return muA * muB             # A * B
 
+#crisp value ko add > membership value add > if there r more than one same crisp value then take min of their membership
 def fuzzy_extension_add(valsA, muA, valsB, muB):
     result = {}
     for a, ma in zip(valsA, muA):
         for b, mb in zip(valsB, muB):
-            z = round(a + b, 6)
-            result[z] = max(result.get(z, 0), min(ma, mb))
+            z = round(a + b, 6)         #round off upto 6 > depends on us
+            result[z] = max(result.get(z, 0), min(ma, mb)) #multiple pair > same z > take max of z but min of membership
     return np.array(sorted(result)), np.array([result[z] for z in sorted(result)])
 
+#instead of add use product
 def fuzzy_extension_multiply(valsA, muA, valsB, muB):
     result = {}
     for a, ma in zip(valsA, muA):
@@ -105,6 +107,17 @@ def compute_ts_fan_speed(T, H):
 # ===========================================================
 # 21. FUZZY RELATION COMPOSITION
 # ===========================================================
+# temp    500     1000        1500
+# 18      0.8     0.4         0.0
+# 22      0.2     0.9         0.3 
+# 26      0.0     0.5         0.9
+
+# roto    800     1600        2400
+# 500      0.9    0.2        0.0
+# 1000      0.3     0.8         0.4 
+# 1500      0.0     0.4         0.95
+
+#take min of 0.8,0.9 > 0.4,0.2 > 0,0 > max of ans > 0.8 > repeat for matrix > composition
 
 Temp_vals = np.array([18, 22, 26])
 Rotor_vals = np.array([500, 1000, 1500])
@@ -135,13 +148,13 @@ def fuzzify_temp_crisp(t):
     mus = []
     for i, c in enumerate(Temp_vals):
         if i == 0:
-            a,b,c2 = Temp_vals[0]-4, Temp_vals[0], Temp_vals[1]
+            a,b,c2 = Temp_vals[0]-4, Temp_vals[0], Temp_vals[1]     
         elif i == 2:
-            a,b,c2 = Temp_vals[1], Temp_vals[2], Temp_vals[2]+4
+            a,b,c2 = Temp_vals[1], Temp_vals[2], Temp_vals[2]+4     
         else:
             a,b,c2 = Temp_vals[i-1], Temp_vals[i], Temp_vals[i+1]
 
-        mu = triangular_membership(np.array([t]), a, b, c2)[0]
+        mu = triangular_membership(np.array([t]), a, b, c2)[0]      # 0.0, 0.75, 0.25 for 23 deg temp
         mus.append(mu)
 
     mus = np.array(mus)
